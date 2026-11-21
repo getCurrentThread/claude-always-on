@@ -1,17 +1,25 @@
 # Registers the scheduled task that runs watchdog.ps1 from this folder (at logon + every 5 min) for the
-# current user, without elevation, and runs it once. -Uninstall removes the task. Windows PowerShell 5.1 compatible.
+# current user with highest privileges, and runs it once. -Uninstall removes the task. Windows PowerShell 5.1 compatible.
 param(
     [switch]$Uninstall,
     [string]$TaskName = 'Claude Always-On'
 )
 $ErrorActionPreference = 'Stop'
 
+$me = [Security.Principal.WindowsIdentity]::GetCurrent()
+# A task that runs elevated can only be registered (or removed) elevated: relaunch through UAC.
+if (-not ([Security.Principal.WindowsPrincipal]$me).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    $argv = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-TaskName', "`"$TaskName`"")
+    if ($Uninstall) { $argv += '-Uninstall' }
+    $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList $argv
+    exit $p.ExitCode
+}
+
 if ($Uninstall) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false   # the session, session-id.txt and the log stay
     return
 }
 
-$me     = [Security.Principal.WindowsIdentity]::GetCurrent()
 $script = [Security.SecurityElement]::Escape((Join-Path $PSScriptRoot 'watchdog.ps1'))
 # Two triggers: the logon trigger's repetition only starts at the next logon (a task registered mid-session
 # ran once and did not repeat within 400 s), so the time trigger repeats from the moment of install.
@@ -24,6 +32,7 @@ $xml = @"
     <Principal id="Author">
       <UserId>$($me.User.Value)</UserId>
       <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
     </Principal>
   </Principals>
   <Settings>

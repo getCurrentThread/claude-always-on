@@ -19,7 +19,7 @@ itself trusted. Change the name, model or flags on that line of `watchdog.ps1`, 
 ## Requirements
 
 Windows 10/11 · Windows PowerShell 5.1 · Claude Code CLI at `%USERPROFILE%\.local\bin\claude.exe`,
-signed in (last checked on 2.1.325) · Python on `PATH`, used only by the trust repair below.
+signed in (last checked on 2.1.330) · an administrator account (UAC) · Python on `PATH`, used only by the trust repair below.
 
 ## Install
 
@@ -28,12 +28,23 @@ git clone https://github.com/getCurrentThread/claude-always-on "$env:USERPROFILE
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\always-on\install.ps1"
 ```
 
-`install.ps1` registers the task `Claude Always-On` for the current user, without elevation, and runs it
-once. The clone is the installation: the task runs `watchdog.ps1` from that folder, so `git pull`
+`install.ps1` registers the task `Claude Always-On` for the current user with highest privileges, and runs
+it once. Registering such a task needs elevation, so the script asks UAC for it when it is not already
+elevated. The clone is the installation: the task runs `watchdog.ps1` from that folder, so `git pull`
 updates it. Run `install.ps1` again if you move the folder.
 
 The task has two triggers, each repeating every 5 minutes: one at logon and one from the time of install.
 The second is there because the first only starts repeating at the next logon.
+
+## Elevation
+
+The task runs elevated, so the session it starts can run administrator commands (`nssm`, service
+control) without a UAC prompt. A `--bg` session runs under the Claude Code background daemon, and the
+daemon keeps the token of whoever started it first. If a non-elevated `claude --bg` started the daemon
+before the task did, stop it once from an elevated prompt (`claude daemon stop --any`) and run the task
+again (`Start-ScheduledTask 'Claude Always-On'`).
+
+Anyone who can reach the session through Remote Control can run administrator commands on this PC.
 
 ## Trust repair
 
